@@ -5,7 +5,7 @@ using GLPK
 using DataFrames
 using CSV
 
-const DATA_DIR = "C:\\Users\\hannegga\\IdeaProjects\\MILP_practice\\src"; # Remember to change backslash to /
+const DATA_DIR = "C:\\Users\\hanne\\OneDrive - NTNU\\Desktop\\2022\\2022høst\\TTK16\\MILP_practice\\src"; # Remember to change backslash to /
 
 Example3_df = CSV.read(joinpath(DATA_DIR,"Example3.dat"), DataFrames.DataFrame)
 
