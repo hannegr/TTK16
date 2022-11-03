@@ -64,32 +64,38 @@ model = Model(GLPK.Optimizer)
 @objective(model, Max, sum(q_oil[Wells]))
 
 ### Define constraints
-#TODO fix whatever is not working here 
+@constraint(model, [n in Wells], q_oil[n] ==  q_gas[n]/gor[n])
+@constraint(model, [n in Wells], q_oil[n] == (1-wcut[n])*q_water[n]/wcut[n])
 
-
-
-@constraint(model, sum(q_inj) <= Qinj_max)
+@constraint(model, sum(q_inj[n] for n in Wells) <= Qinj_max)
 @constraint(model, sum(q_water[n] + q_oil[n] for n in Wells) <= Qliq_max)
 @constraint(model, sum(q_inj[n] + q_gas[n] for n in Wells) <= Qgas_max)
-@constraint(model, (q_oil[n] == Qoil[n] for n in Wells))
-@constraint(model, q_oil[n] <= Qoil*y[n] for n in Wells)
-@constraint(model, q_inj[n] >= lb_inj[n]*y[n] for n in Wells)
-@constraint(model, q_inj[n] <= ub_inj[n]*y[n] for n in Wells)
-@constraint(model, q_water[n] == wcut[n]*q_oil[n] for n in Wells)
-@constraint(model, q_gas[n] == gor[n]*q_oil[n] for n in Wells)
 
-@constraint(model, sum(lam[n,:] for n in Wells) <= 1)
-@constraint(model, sum(z[n,:] for n in Wells) <= 1)
-@constraint(model, q_inj[n] == sum(lam[n,k]*Qinj[n,k] for n in Wells, k in DatapointsWell[n]))
-@constraint(model, q_oil[n] == sum(lam[n,k]*Qoil[n,k] for n in Wells, k in DatapointsWell[n]))
 
+@constraint(model, [n in Wells], q_oil[n] <= max(Qoil[n]...)*y[n])
+@constraint(model, [n in Wells], lb_inj[n]*y[n] <= q_inj[n])
+@constraint(model, [n in Wells], q_inj[n] <= ub_inj[n]*y[n])
+
+
+
+@constraint(model, [n in Wells], sum(lam[n,:]) == y[n])
+@constraint(model, [n in Wells], sum(z[n,:]) == y[n])
+@constraint(model, [n in Wells], lam[n,1] <= z[n,1])
+@constraint(model, [n in Wells], lam[n, Datapoints[n]]<=z[n, Datapoints[n]])
+@constraint(model, [n in Wells, k in DatapointsWell[n][2:length(DatapointsWell[n])-1]], lam[n,k] <= z[n,k]+ z[n,k+1])
+@constraint(model, [n in Wells], q_inj[n] == sum(lam[n, k]*Qinj[n,k] for k in DatapointsWell[n]))
+@constraint(model, [n in Wells], q_oil[n] == sum(lam[n, k]*Qoil[n,k] for k in DatapointsWell[n]))
 
 
 
 ### Optimize and show results 
 optimize!(model);
 
-@show value.(x);
+@show value.(q_oil);
+@show value.(lam);
+@show value.(q_inj);
+@show value.(z);
+@show value.(y)
 @show objective_value(model);
 
 @show termination_status(model);
