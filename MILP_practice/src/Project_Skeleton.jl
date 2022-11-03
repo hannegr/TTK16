@@ -48,33 +48,51 @@ end
 ### Create model object
 model = Model(GLPK.Optimizer)
 
-### TODO finn x(q_inj^n) vha PWL. 
-#altså x = \hat{Qoil}!
-
-
 ### Define variables
-@variable(model,0 <= x[n in Wells])
-@variable(model, 0 <= z[(n, 9) n in Wells], bin)
-@variable(model, 0 <= lambda[(n,9) n  in Wells])
+@variable(model, y[Wells], Bin)
+@variable(model, 0 <= q_inj[Wells])
+@variable(model, 0 <= q_oil[Wells])
+@variable(model, 0 <= q_water[Wells])
+@variable(model, 0 <= q_gas[Wells])
+
+@variable(model, 0<= lam[n=Wells, k=DatapointsWell[n]])
+@variable(model, z[n=Wells, k=DatapointsWell[n]], Bin)
+
 
 
 ### Define objective 
-@objective(model, Max, sum(x[n] for n in Wells))
+@objective(model, Max, sum(q_oil[Wells]))
 
 ### Define constraints
-@constraint(model, sum(lambda) <= 1)
-@constraint(model, sum(z) <= 1)
-@constraint(model, )
-@constraint(model, sum(Qinj) <= Qinj_max)
+#TODO fix whatever is not working here 
+
+
+
+@constraint(model, sum(q_inj) <= Qinj_max)
+@constraint(model, sum(q_water[n] + q_oil[n] for n in Wells) <= Qliq_max)
+@constraint(model, sum(q_inj[n] + q_gas[n] for n in Wells) <= Qgas_max)
+@constraint(model, (q_oil[n] == Qoil[n] for n in Wells))
+@constraint(model, q_oil[n] <= Qoil*y[n] for n in Wells)
+@constraint(model, q_inj[n] >= lb_inj[n]*y[n] for n in Wells)
+@constraint(model, q_inj[n] <= ub_inj[n]*y[n] for n in Wells)
+@constraint(model, q_water[n] == wcut[n]*q_oil[n] for n in Wells)
+@constraint(model, q_gas[n] == gor[n]*q_oil[n] for n in Wells)
+
+@constraint(model, sum(lam[n,:] for n in Wells) <= 1)
+@constraint(model, sum(z[n,:] for n in Wells) <= 1)
+@constraint(model, q_inj[n] == sum(lam[n,k]*Qinj[n,k] for n in Wells, k in DatapointsWell[n]))
+@constraint(model, q_oil[n] == sum(lam[n,k]*Qoil[n,k] for n in Wells, k in DatapointsWell[n]))
+
+
 
 
 ### Optimize and show results 
-#optimize!(model);
+optimize!(model);
 
-#@show value.(x);
-#@show objective_value(model);
+@show value.(x);
+@show objective_value(model);
 
-#@show termination_status(model);
+@show termination_status(model);
 
 
 
