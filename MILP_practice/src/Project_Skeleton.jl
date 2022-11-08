@@ -20,6 +20,12 @@ Qinj_max = 500; # Max gas injection
 Qliq_max = 5500; # Max liquid production
 Qgas_max = 6000; # Max gas production
 
+
+Q_inj_max = zeros(100)
+for n = 1:100
+    Q_inj_max[n] = 25*n
+end
+
 # Read in bounds on injection
 injectionbounds_df = CSV.read(joinpath(DATA_DIR,"injectionbounds.csv"), DataFrames.DataFrame, delim = " ", header = false)
 lb_inj = Containers.DenseAxisArray(injectionbounds_df[:,2], Wells);
@@ -40,65 +46,86 @@ Qoil = zeros(N,9);
 for row in eachrow(datapoints_df)
     n = row[1];
     k = row[2];
-    #println("($n,$k): $(row[3])")
     Qinj[n,k] = row[3];
     Qoil[n,k] = row[4];
 end
 
+Qoil_max = zeros(N)
+for n in Wells
+    Qoil_max[n] = max(Qoil[n,:]...)
+end
+
 ### Create model object
-model = Model(GLPK.Optimizer)
+for d in 1:100
+        
+    model = Model(GLPK.Optimizer)
 
-### Define variables
-@variable(model, y[Wells], Bin)
-@variable(model, 0 <= q_inj[Wells])
-@variable(model, 0 <= q_oil[Wells])
-@variable(model, 0 <= q_water[Wells])
-@variable(model, 0 <= q_gas[Wells])
+    ### Define variables
+    @variable(model, y[Wells], Bin)
+    @variable(model, 0.0 <= q_inj[Wells])
+    @variable(model, 0.0 <= q_oil[Wells])
+    @variable(model, 0.0 <= q_water[Wells])
+    @variable(model, 0.0 <= q_gas[Wells])
 
-@variable(model, 0<= lam[n=Wells, k=DatapointsWell[n]])
-@variable(model, z[n=Wells, k=DatapointsWell[n]], Bin)
-
-
-
-### Define objective 
-@objective(model, Max, sum(q_oil[Wells]))
-
-### Define constraints
-@constraint(model, [n in Wells], q_oil[n] ==  q_gas[n]/gor[n])
-@constraint(model, [n in Wells], q_oil[n] == (1-wcut[n])*q_water[n]/wcut[n])
-
-@constraint(model, sum(q_inj[n] for n in Wells) <= Qinj_max)
-@constraint(model, sum(q_water[n] + q_oil[n] for n in Wells) <= Qliq_max)
-@constraint(model, sum(q_inj[n] + q_gas[n] for n in Wells) <= Qgas_max)
-
-
-@constraint(model, [n in Wells], q_oil[n] <= max(Qoil[n]...)*y[n])
-@constraint(model, [n in Wells], lb_inj[n]*y[n] <= q_inj[n])
-@constraint(model, [n in Wells], q_inj[n] <= ub_inj[n]*y[n])
+    @variable(model, 0.0 <= lam[n=Wells, k=DatapointsWell[n]])
+    @variable(model, z[n=Wells, k=DatapointsWell[n]], Bin)
 
 
 
-@constraint(model, [n in Wells], sum(lam[n,:]) == y[n])
-@constraint(model, [n in Wells], sum(z[n,:]) == y[n])
-@constraint(model, [n in Wells], lam[n,1] <= z[n,1])
-@constraint(model, [n in Wells], lam[n, Datapoints[n]]<=z[n, Datapoints[n]])
-@constraint(model, [n in Wells, k in DatapointsWell[n][2:length(DatapointsWell[n])-1]], lam[n,k] <= z[n,k]+ z[n,k+1])
-@constraint(model, [n in Wells], q_inj[n] == sum(lam[n, k]*Qinj[n,k] for k in DatapointsWell[n]))
-@constraint(model, [n in Wells], q_oil[n] == sum(lam[n, k]*Qoil[n,k] for k in DatapointsWell[n]))
+    ### Define objective 
+    @objective(model, Max, sum(q_oil[n] for n in Wells))  
+
+    ### Define constraints
+    @constraint(model, [n in Wells], q_oil[n] ==  q_gas[n]/gor[n]) 
+    @constraint(model, [n in Wells], q_water[n] == wcut[n]*q_oil[n]/(1-wcut[n])) 
+
+    @constraint(model, sum(q_inj[n] for n in Wells) <= Q_inj_max[d]) 
+    @constraint(model, sum(q_water[n] + q_oil[n] for n in Wells) <= Qliq_max) 
+    @constraint(model, sum(q_inj[n] + q_gas[n] for n in Wells) <= Qgas_max) 
+
+
+    @constraint(model, [n in Wells], q_oil[n] <= Qoil_max[n]*y[n])
+    @constraint(model, [n in Wells], lb_inj[n]*y[n] <= q_inj[n]) # min(Qinj[n]...)
+    @constraint(model, [n in Wells], q_inj[n] <= ub_inj[n]*y[n]) # max(Qinj[n]...)
 
 
 
-### Optimize and show results 
-optimize!(model);
-
-@show value.(q_oil);
-@show value.(lam);
-@show value.(q_inj);
-@show value.(z);
-@show value.(y)
-@show objective_value(model);
-
-@show termination_status(model);
+    @constraint(model, [n in Wells], sum(lam[n,:]) == y[n]) 
+    @constraint(model, [n in Wells], sum(z[n,:]) == y[n])
+    @constraint(model, [n in Wells], lam[n,1] <= z[n,2]) 
+    @constraint(model, [n in Wells], lam[n, Datapoints[n]]<=z[n, Datapoints[n]]) 
+    @constraint(model, [n in Wells, k in DatapointsWell[n][2:length(DatapointsWell[n])-1]], lam[n,k] <= z[n,k]+ z[n,k+1])  
+    @constraint(model, [n in Wells], q_inj[n] == sum(lam[n, k]*Qinj[n,k] for k in DatapointsWell[n])) 
+    @constraint(model, [n in Wells], q_oil[n] == sum(lam[n, k]*Qoil[n,k] for k in DatapointsWell[n])) 
 
 
 
+    ### Optimize and show results 
+    optimize!(model);
+
+    @show value.(q_oil);
+    @show value.(q_gas); 
+    @show value.(q_water);
+    @show value.(lam);
+    @show value.(q_inj);
+    @show value.(z);
+    @show value.(y)
+    @show objective_value(model);
+
+    qoil = zeros(8)
+    qgas = zeros(8)
+    qwater = zeros(8)
+    qinj = zeros(8)
+
+    for i in 1:8
+        qoil[i] = value.(q_oil[i])
+        qgas[i] = value.(q_gas[i])
+        qwater[i] = value.(q_water[i])
+        qinj[i] = value.(q_inj[i])
+    end 
+
+
+    @show termination_status(model);
+
+    CSV.write("$(DATA_DIR)\\info_different_Q_inj.csv",DataFrame(q_oil = qoil, q_gas = qgas, q_water = qwater, q_inj = qinj, Q_inj_max = Q_inj_max[d], objective_value = objective_value(model)), append=true)
+end 
